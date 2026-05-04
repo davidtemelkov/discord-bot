@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 TOKEN = os.getenv("TOKEN")
 
 intents = discord.Intents.default()
+intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 DATA_FILE = "data.json"
