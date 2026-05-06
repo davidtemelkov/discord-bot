@@ -16,7 +16,6 @@ SOFIA_TZ = ZoneInfo("Europe/Sofia")
 TARGET_HOUR = 12
 
 # ---------------- CHORES CONFIG ----------------
-# interval = every N days
 CHORES = {
     "dishes": 1,
     "trash": 2,
@@ -29,6 +28,9 @@ data = {
     "users": [],
     "vacation": False
 }
+
+# ✅ NEW: prevents duplicate daily messages
+last_sent_date = None
 
 # ---------------- SEED SYSTEM ----------------
 
@@ -48,7 +50,7 @@ def assign_chores(seed, users, date_str):
 
     for chore, interval in CHORES.items():
 
-        # 🔁 interval logic (IMPORTANT FIX)
+        # interval logic
         if day_number % interval != 0:
             continue
 
@@ -71,11 +73,19 @@ async def on_ready():
 
 @tasks.loop(minutes=1)
 async def chore_loop():
+    global last_sent_date
+
     if data["vacation"] or len(data["users"]) < 2:
         return
 
     now = datetime.datetime.now(SOFIA_TZ)
+    today = now.date().isoformat()
 
+    # ✅ already sent today → stop
+    if last_sent_date == today:
+        return
+
+    # wait until target hour
     if now.hour < TARGET_HOUR:
         return
 
@@ -83,10 +93,8 @@ async def chore_loop():
     if not channel:
         return
 
-    date_str = now.date().isoformat()
-    seed = get_daily_seed(date_str)
-
-    chores_today = assign_chores(seed, data["users"], date_str)
+    seed = get_daily_seed(today)
+    chores_today = assign_chores(seed, data["users"], today)
 
     if not chores_today:
         return
@@ -95,6 +103,9 @@ async def chore_loop():
 
     for chore, user_id, label in chores_today:
         await channel.send(f"👉 <@{user_id}> ({label}) → **{chore}**")
+
+    # ✅ mark as sent
+    last_sent_date = today
 
 # ---------------- COMMANDS ----------------
 
@@ -132,12 +143,9 @@ async def fromseed(ctx, seed: int):
         await ctx.send("⚠️ Run !setup first.")
         return
 
-    # fake date only for formatting
-    date_str = "seed-mode"
-
     chores_today = assign_chores(seed, data["users"], "2026-01-01")
 
-    msg = f" **Chores from seed {seed}:**\n\n"
+    msg = f"📌 **Chores from seed {seed}:**\n\n"
 
     for chore, user_id, label in chores_today:
         msg += f"👉 <@{user_id}> ({label}) → **{chore}**\n"
